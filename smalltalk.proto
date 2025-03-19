@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package smalltalk;
+
+// Сервис для взаимодействия между хостами
+service SmallTalkService {
+  // Запрос задачи
+  rpc GetTask (TaskRequest) returns (TaskResponse) {}
+  // Сообщение о завершении задачи
+  rpc CompleteTask (CompleteRequest) returns (CompleteResponse) {}
+}
+
+// Запрос задачи
+message TaskRequest {
+  int32 device_id = 1;       // ID устройства GPU
+  int64 key_count = 2;       // Желаемое количество ключей
+}
+
+// Ответ с задачей
+message TaskResponse {
+  string start = 1;          // Начало диапазона (hex)
+  string end = 2;            // Конец диапазона (hex)
+}
+
+// Запрос завершения задачи
+message CompleteRequest {
+  int32 device_id = 1;       // ID устройства GPU
+  string start = 2;          // Начало диапазона (hex)
+  string end = 3;            // Конец диапазона (hex)
+}
+
+// Ответ о завершении
+message CompleteResponse {
+  string status = 1;         // "success" или ошибка
+}

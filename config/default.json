@@ -1,0 +1,8 @@
+{
+    "DB_USER": "user",
+    "DB_PASSWORD": "pass",
+    "DB_HOST": "localhost",
+    "DB_PORT": "27017",
+    "DB_NAME": "btc_puzzle_69",
+    "KEY_COUNT": "50000000000"
+  }
