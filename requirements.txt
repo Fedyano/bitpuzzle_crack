@@ -18,3 +18,4 @@ six~=1.17.0
 python-dateutil~=2.9.0
 uvloop~=0.21.0
 requests~=2.32.3
+psutil

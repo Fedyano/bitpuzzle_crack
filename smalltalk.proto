@@ -8,6 +8,8 @@ service SmallTalkService {
   rpc GetTask (TaskRequest) returns (TaskResponse) {}
   // Сообщение о завершении задачи
   rpc CompleteTask (CompleteRequest) returns (CompleteResponse) {}
+  // Проверка соединения
+  rpc Ping (PingRequest) returns (PingResponse) {}
 }
 
 // Запрос задачи
@@ -32,4 +34,14 @@ message CompleteRequest {
 // Ответ о завершении
 message CompleteResponse {
   string status = 1;         // "success" или ошибка
+}
+
+// Запрос проверки соединения
+message PingRequest {
+  string message = 1;        // Тестовое сообщение
+}
+
+// Ответ на проверку соединения
+message PingResponse {
+  string message = 1;        // Эхо-сообщение
 }

@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fsmalltalk.proto\x12\tsmalltalk\"3\n\x0bTaskRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\x05\x12\x11\n\tkey_count\x18\x02 \x01(\x03\"*\n\x0cTaskResponse\x12\r\n\x05start\x18\x01 \x01(\t\x12\x0b\n\x03\x65nd\x18\x02 \x01(\t\"@\n\x0f\x43ompleteRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\x05\x12\r\n\x05start\x18\x02 \x01(\t\x12\x0b\n\x03\x65nd\x18\x03 \x01(\t\"\"\n\x10\x43ompleteResponse\x12\x0e\n\x06status\x18\x01 \x01(\t2\x9b\x01\n\x10SmallTalkService\x12<\n\x07GetTask\x12\x16.smalltalk.TaskRequest\x1a\x17.smalltalk.TaskResponse\"\x00\x12I\n\x0c\x43ompleteTask\x12\x1a.smalltalk.CompleteRequest\x1a\x1b.smalltalk.CompleteResponse\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fsmalltalk.proto\x12\tsmalltalk\"3\n\x0bTaskRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\x05\x12\x11\n\tkey_count\x18\x02 \x01(\x03\"*\n\x0cTaskResponse\x12\r\n\x05start\x18\x01 \x01(\t\x12\x0b\n\x03\x65nd\x18\x02 \x01(\t\"@\n\x0f\x43ompleteRequest\x12\x11\n\tdevice_id\x18\x01 \x01(\x05\x12\r\n\x05start\x18\x02 \x01(\t\x12\x0b\n\x03\x65nd\x18\x03 \x01(\t\"\"\n\x10\x43ompleteResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\"\x1e\n\x0bPingRequest\x12\x0f\n\x07message\x18\x01 \x01(\t\"\x1f\n\x0cPingResponse\x12\x0f\n\x07message\x18\x01 \x01(\t2\xd6\x01\n\x10SmallTalkService\x12<\n\x07GetTask\x12\x16.smalltalk.TaskRequest\x1a\x17.smalltalk.TaskResponse\"\x00\x12I\n\x0c\x43ompleteTask\x12\x1a.smalltalk.CompleteRequest\x1a\x1b.smalltalk.CompleteResponse\"\x00\x12\x39\n\x04Ping\x12\x16.smalltalk.PingRequest\x1a\x17.smalltalk.PingResponse\"\x00\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -39,6 +39,10 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_COMPLETEREQUEST']._serialized_end=191
   _globals['_COMPLETERESPONSE']._serialized_start=193
   _globals['_COMPLETERESPONSE']._serialized_end=227
-  _globals['_SMALLTALKSERVICE']._serialized_start=230
-  _globals['_SMALLTALKSERVICE']._serialized_end=385
+  _globals['_PINGREQUEST']._serialized_start=229
+  _globals['_PINGREQUEST']._serialized_end=259
+  _globals['_PINGRESPONSE']._serialized_start=261
+  _globals['_PINGRESPONSE']._serialized_end=292
+  _globals['_SMALLTALKSERVICE']._serialized_start=295
+  _globals['_SMALLTALKSERVICE']._serialized_end=509
 # @@protoc_insertion_point(module_scope)

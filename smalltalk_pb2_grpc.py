@@ -45,6 +45,11 @@ class SmallTalkServiceStub(object):
                 request_serializer=smalltalk__pb2.CompleteRequest.SerializeToString,
                 response_deserializer=smalltalk__pb2.CompleteResponse.FromString,
                 _registered_method=True)
+        self.Ping = channel.unary_unary(
+                '/smalltalk.SmallTalkService/Ping',
+                request_serializer=smalltalk__pb2.PingRequest.SerializeToString,
+                response_deserializer=smalltalk__pb2.PingResponse.FromString,
+                _registered_method=True)
 
 
 class SmallTalkServiceServicer(object):
@@ -65,6 +70,13 @@ class SmallTalkServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def Ping(self, request, context):
+        """Проверка соединения
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_SmallTalkServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -77,6 +89,11 @@ def add_SmallTalkServiceServicer_to_server(servicer, server):
                     servicer.CompleteTask,
                     request_deserializer=smalltalk__pb2.CompleteRequest.FromString,
                     response_serializer=smalltalk__pb2.CompleteResponse.SerializeToString,
+            ),
+            'Ping': grpc.unary_unary_rpc_method_handler(
+                    servicer.Ping,
+                    request_deserializer=smalltalk__pb2.PingRequest.FromString,
+                    response_serializer=smalltalk__pb2.PingResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -134,6 +151,33 @@ class SmallTalkService(object):
             '/smalltalk.SmallTalkService/CompleteTask',
             smalltalk__pb2.CompleteRequest.SerializeToString,
             smalltalk__pb2.CompleteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Ping(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/smalltalk.SmallTalkService/Ping',
+            smalltalk__pb2.PingRequest.SerializeToString,
+            smalltalk__pb2.PingResponse.FromString,
             options,
             channel_credentials,
             insecure,
