@@ -14,34 +14,36 @@ service SmallTalkService {
 
 // Запрос задачи
 message TaskRequest {
-  int32 device_id = 1;       // ID устройства GPU
-  int64 key_count = 2;       // Желаемое количество ключей
+  int32 device_id = 1;
+  int64 key_count = 2;
 }
 
 // Ответ с задачей
 message TaskResponse {
-  string start = 1;          // Начало диапазона (hex)
-  string end = 2;            // Конец диапазона (hex)
+  string start = 1;
+  string end = 2;
+  int32 col_idx = 3;  // Номер коллекции
 }
 
 // Запрос завершения задачи
 message CompleteRequest {
-  int32 device_id = 1;       // ID устройства GPU
-  string start = 2;          // Начало диапазона (hex)
-  string end = 3;            // Конец диапазона (hex)
+  int32 device_id = 1;
+  string start = 2;
+  string end = 3;
+  int32 col_idx = 4;  // Добавим col_idx для точного сохранения
 }
 
 // Ответ о завершении
 message CompleteResponse {
-  string status = 1;         // "success" или ошибка
+  string status = 1;
 }
 
 // Запрос проверки соединения
 message PingRequest {
-  string message = 1;        // Тестовое сообщение
+  string message = 1;
 }
 
 // Ответ на проверку соединения
 message PingResponse {
-  string message = 1;        // Эхо-сообщение
+  string message = 1;
 }
