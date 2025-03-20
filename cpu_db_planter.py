@@ -5,6 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import UpdateOne
 from pymongo.errors import PyMongoError, BulkWriteError
 import time
+
 from settings import DB_USER, DB_PASSWORD, DB_HOST, DB_NAME, KEY_COUNT, DB_PORT
 
 # Настройка логирования
@@ -20,113 +21,150 @@ mongo_client = AsyncIOMotorClient(
     authSource=DB_NAME
 )
 db = mongo_client[DB_NAME]
-ranges_collection = db["ranges"]
 
 # Параметры Puzzle 69
 START = 1 << 68  # 2^68
 END = (1 << 69) - 1  # 2^69 - 1
 TOTAL_KEYS = END - START + 1
 RANGE_SIZE = KEY_COUNT  # 50B из settings
-
+NUM_COLLECTIONS = 20  # 5% на коллекцию
+STEP_PERCENT = 0.05  # 5% за проход
 
 # Проверка подключения к MongoDB
 async def check_db_connection():
     try:
+        start_time = time.time()
         await db.command("ping")
-        logger.info("База данных доступна.")
+        logger.info("База данных доступна, проверка выполнена за %.3f мс", (time.time() - start_time) * 1000)
     except PyMongoError as e:
         logger.error("Не удалось подключиться к базе данных: %s", e)
         sys.exit(1)
 
-
-async def get_last_range():
-    """Получение последнего записанного участка"""
-    last_doc = await ranges_collection.find_one(sort=[("start", -1)])  # Последний по start
+async def get_last_range(collection):
+    """Получение последнего записанного участка в коллекции"""
+    logger.info("Начало get_last_range для коллекции %s", collection.name)
+    start_time = time.time()
+    last_doc = await collection.find_one(sort=[("start", -1)])
     if last_doc:
         last_start = int(last_doc["start"], 16)
-        logger.info("Найден последний участок: start=%s", hex(last_start))
+        logger.info("Найден последний участок: start=%s, выполнено за %.3f мс", hex(last_start), (time.time() - start_time) * 1000)
         return last_start
-    logger.info("База пуста, начинаем с начала")
-    return START - RANGE_SIZE  # Чтобы первый цикл начался с START
+    logger.info("Коллекция пуста, начинаем с начала, выполнено за %.3f мс", (time.time() - start_time) * 1000)
+    return START - RANGE_SIZE
 
+async def update_stats(total_docs, num_ranges, step_start_time):
+    """Обновление статистики коллекций"""
+    logger.info("Начало update_stats")
+    start_time = time.time()
+    stats_collection = db["stats"]
+    stats = []
+
+    ranges_per_collection = num_ranges // NUM_COLLECTIONS + (1 if num_ranges % NUM_COLLECTIONS else 0)
+
+    for col_idx in range(NUM_COLLECTIONS):
+        collection = db[f"ranges_{col_idx}"]
+        col_start_time = time.time()
+        count = await collection.count_documents({})
+        col_end_time = time.time()
+
+        estimated_time = (ranges_per_collection - count) * 0.02  # 20 мс на запись одной записи
+        stats.append({
+            "collection": f"ranges_{col_idx}",
+            "filled_count": count,
+            "total_expected": ranges_per_collection,
+            "percent_filled": (count / ranges_per_collection) * 100,
+            "estimated_time_remaining_sec": estimated_time,
+            "time_spent_sec": col_end_time - step_start_time,
+            "last_updated": time.time()
+        })
+
+    if stats:
+        await stats_collection.drop()
+        await stats_collection.insert_many(stats)
+        logger.info("Статистика обновлена: %d коллекций, выполнено за %.3f мс", len(stats), (time.time() - start_time) * 1000)
 
 async def seed_ranges():
     num_ranges = (TOTAL_KEYS + RANGE_SIZE - 1) // RANGE_SIZE
-    logger.info("Всего требуется %d участков по %d ключей", num_ranges, RANGE_SIZE)
+    ranges_per_collection = num_ranges // NUM_COLLECTIONS + (1 if num_ranges % NUM_COLLECTIONS else 0)
+    step_size = int(num_ranges * STEP_PERCENT / NUM_COLLECTIONS)  # Участков на коллекцию за шаг
+    logger.info("Всего требуется %d участков по %d ключей, %d участков на коллекцию, шаг %d участков на коллекцию",
+                num_ranges, RANGE_SIZE, ranges_per_collection, step_size)
 
-    # Проверяем текущее состояние базы
-    start_time = time.time()
-    total_docs = await ranges_collection.count_documents({})
-    end_time = time.time()
-    logger.debug("Подсчёт общего количества документов выполнен за %.3f мс", (end_time - start_time) * 1000)
+    collections = [db[f"ranges_{i}"] for i in range(NUM_COLLECTIONS)]
+    last_starts = await asyncio.gather(*(get_last_range(col) for col in collections))
+    start_indices = [(max(0, (last_start - START) // RANGE_SIZE + 1) if last_start >= START else 0) for last_start in last_starts]
 
+    total_docs = sum(await asyncio.gather(*(col.count_documents({}) for col in collections)))
     if total_docs >= num_ranges:
         logger.info("Все %d участков уже засеяны", num_ranges)
+        await update_stats(total_docs, num_ranges, time.time())
         return
 
-    last_start = await get_last_range()
-    start_index = (last_start - START) // RANGE_SIZE + 1 if last_start >= START else 0
-    logger.info("Найдено %d участков, продолжаем с индекса %d (%s)", total_docs, start_index,
-                hex(START + start_index * RANGE_SIZE))
+    logger.info("Найдено %d участков, начинаем заполнение с шагом %d на коллекцию", total_docs, step_size)
+    batch_size = 10000
 
-    batch_size = 100000
-    operations = []
+    while total_docs < num_ranges:
+        step_start_time = time.time()
+        for col_idx in range(NUM_COLLECTIONS):
+            collection = collections[col_idx]
+            col_start = START + col_idx * ranges_per_collection * RANGE_SIZE
+            col_end = min(col_start + ranges_per_collection * RANGE_SIZE - 1, END)
+            current_index = start_indices[col_idx]
 
-    for i in range(start_index, num_ranges):
-        start = START + i * RANGE_SIZE
-        end = min(start + RANGE_SIZE - 1, END)
-        doc = {
-            "start": hex(start),
-            "end": hex(end),
-            "status": "pending",
-            "host": None,
-            "processed_at": None
-        }
-        operations.append(UpdateOne({"start": hex(start)}, {"$setOnInsert": doc}, upsert=True))
+            operations = []
+            for i in range(step_size):
+                idx = current_index + i
+                if idx >= ranges_per_collection:
+                    break
+                start = col_start + idx * RANGE_SIZE
+                if start > col_end:
+                    break
+                end = min(start + RANGE_SIZE - 1, col_end)
+                doc = {
+                    "start": hex(start),
+                    "end": hex(end),
+                    "status": "pending",
+                    "host": None,
+                    "processed_at": None
+                }
+                operations.append(UpdateOne({"start": hex(start)}, {"$setOnInsert": doc}, upsert=True))
 
-        if len(operations) >= batch_size:
-            try:
-                result = await ranges_collection.bulk_write(operations, ordered=False)
-                logger.info("Записан батч из %d участков, добавлено: %d, пропущено: %d, последний: %s",
-                            len(operations), result.upserted_count, len(operations) - result.upserted_count, hex(start))
-                operations = []
-            except BulkWriteError as e:
-                logger.error("Ошибка при записи батча: %s", e.details)
-                sys.exit(1)
+                if len(operations) >= batch_size or i == step_size - 1:
+                    try:
+                        result = await collection.bulk_write(operations, ordered=False)
+                        logger.info("Коллекция ranges_%d: записан батч из %d участков, добавлено: %d, пропущено: %d",
+                                    col_idx, len(operations), result.upserted_count, len(operations) - result.upserted_count)
+                        operations = []
+                    except BulkWriteError as e:
+                        logger.error("Ошибка при записи батча в ranges_%d: %s", col_idx, e.details)
+                        sys.exit(1)
 
-    if operations:
-        try:
-            result = await ranges_collection.bulk_write(operations, ordered=False)
-            logger.info("Записан последний батч из %d участков, добавлено: %d, пропущено: %d",
-                        len(operations), result.upserted_count, len(operations) - result.upserted_count)
-        except BulkWriteError as e:
-            logger.error("Ошибка при записи последнего батча: %s", e.details)
-            sys.exit(1)
+            start_indices[col_idx] += step_size
 
-    # Проверяем итоговое количество
-    final_count = await ranges_collection.count_documents({})
-    logger.info("Засев завершён, всего в базе %d участков из %d", final_count, num_ranges)
+        total_docs = sum(await asyncio.gather(*(col.count_documents({}) for col in collections)))
+        await update_stats(total_docs, num_ranges, step_start_time)
+        logger.info("Шаг завершён: заполнено %d/%d участков, время шага %.3f сек", total_docs, num_ranges, time.time() - step_start_time)
 
+    logger.info("Засев всех коллекций завершён")
 
 async def ensure_unique_index():
-    """Проверка и создание уникального индекса на start"""
-    try:
-        await ranges_collection.create_index([("start", 1)], unique=True)
-        logger.info("Уникальный индекс на поле start успешно создан или уже существует")
-    except PyMongoError as e:
-        if "duplicate key error" in str(e):
-            logger.error("Обнаружены дубликаты в базе: %s", e)
-            logger.info("Рекомендуется очистить базу командой `db.ranges.drop()` и перезапустить скрипт")
-        else:
-            logger.error("Ошибка при создании индекса: %s", e)
-        sys.exit(1)
-
+    logger.info("Начало ensure_unique_index")
+    start_time = time.time()
+    for col_idx in range(NUM_COLLECTIONS):
+        collection = db[f"ranges_{col_idx}"]
+        try:
+            await collection.create_index([("start", 1)], unique=True)
+            logger.info("Уникальный индекс на start создан для ranges_%d", col_idx)
+        except PyMongoError as e:
+            logger.error("Ошибка при создании индекса для ranges_%d: %s", col_idx, e)
+            sys.exit(1)
+    end_time = time.time()
+    logger.info("Конец ensure_unique_index: выполнено за %.3f мс", (end_time - start_time) * 1000)
 
 async def main():
     await check_db_connection()
-    await ensure_unique_index()  # Проверяем индекс перед началом
+    await ensure_unique_index()
     await seed_ranges()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
