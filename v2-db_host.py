@@ -15,6 +15,7 @@ import argparse
 import os
 from micro_calculator import calculate_optimal_micro_count, calculate_micro_ranges, select_task_range
 from settings import DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_HOST
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -56,20 +57,32 @@ async def initialize_puzzle(puzzle_num, test_mode=False):
     end_hex = puzzle_data["end_hex"]
 
     micro_count = calculate_optimal_micro_count(total_keys)
+    logger.info("Начало расчёта микроучастков для Puzzle %d", puzzle_num)
+    start_time = time.time()
     micro_ranges = calculate_micro_ranges(start_hex, end_hex, micro_count)
+    end_time = time.time()
+    logger.info("Расчёт микроучастков завершён за %.3f сек, создано %d участков", end_time - start_time, len(micro_ranges))
 
     if test_mode:
         logger.info("Тестовый режим: инициализация Puzzle %d с %d микроучастками", puzzle_num, micro_count)
         return micro_ranges
 
     collection = db[f"puzzle_{puzzle_num}"]
+    logger.info("Запрос количества документов в коллекции puzzle_%d", puzzle_num)
+    start_time = time.time()
     existing_docs = await collection.count_documents({})
+    end_time = time.time()
+    logger.info("Запрос количества документов выполнен за %.3f сек, найдено %d документов", end_time - start_time, existing_docs)
+
     if existing_docs >= micro_count:
         logger.info("Коллекция puzzle_%d уже содержит %d микроучастков, пропускаем инициализацию", puzzle_num, existing_docs)
         return micro_ranges
 
     logger.info("Инициализация Puzzle %d", puzzle_num)
-    # await collection.drop()
+    start_time = time.time()
+    await collection.drop()
+    end_time = time.time()
+    logger.info("Очистка коллекции выполнена за %.3f сек", end_time - start_time)
 
     operations = []
     for i, (micro_start_hex, micro_end_hex, side) in enumerate(micro_ranges):
@@ -97,9 +110,32 @@ async def initialize_puzzle(puzzle_num, test_mode=False):
         }
         operations.append(UpdateOne({"START_HEX": micro_start_hex}, {"$setOnInsert": doc}, upsert=True))
 
+    logger.info("Начало записи %d микроучастков в коллекцию puzzle_%d", len(operations), puzzle_num)
+    start_time = time.time()
     await collection.bulk_write(operations, ordered=False)
-    logger.info("Коллекция puzzle_%d инициализирована с %d микроучастками", puzzle_num, micro_count)
+    end_time = time.time()
+    logger.info("Запись микроучастков завершена за %.3f сек", end_time - start_time)
     return micro_ranges
+
+async def test_select_task_range(micro_ranges, task_size=20_000_000_000_000, num_tests=10):
+    """Тестирование выборки задач с выводом полного диапазона микроучастка"""
+    logger.info("Начало тестирования select_task_range с %d попытками", num_tests)
+    for i in range(num_tests):
+        start_time = time.time()
+        task = select_task_range(micro_ranges, task_size)
+        end_time = time.time()
+        if task:
+            start_hex, end_hex, col_idx = task
+            micro_start_hex, micro_end_hex, side = micro_ranges[col_idx]
+            micro_start_int = int(micro_start_hex, 16)
+            micro_end_int = int(micro_end_hex, 16)
+            micro_keys_count = micro_end_int - micro_start_int + 1
+            task_keys_count = int(end_hex, 16) - int(start_hex, 16) + 1
+            logger.info("Тест %d: микроучасток=%s-%s, ключи=%d, задача=%s-%s, ключи=%d, col_idx=%d, side=%s, время=%.3f сек",
+                        i + 1, micro_start_hex, micro_end_hex, micro_keys_count, start_hex, end_hex, task_keys_count, col_idx, side, end_time - start_time)
+        else:
+            logger.info("Тест %d: нет доступных задач, время=%.3f сек", i + 1, end_time - start_time)
+    logger.info("Тестирование select_task_range завершено")
 
 class SmallTalkServiceServicer(smalltalk_pb2_grpc.SmallTalkServiceServicer):
     def __init__(self, puzzle_num, test_mode=False, micro_ranges=None):
@@ -109,7 +145,6 @@ class SmallTalkServiceServicer(smalltalk_pb2_grpc.SmallTalkServiceServicer):
         self.micro_ranges = micro_ranges if test_mode else None
 
     async def GetTask(self, request, context):
-        """Выдача случайной задачи"""
         logger.debug("Запрос задачи от device_id=%d с key_count=%d", request.device_id, request.key_count)
         task_size = request.key_count
 
@@ -123,7 +158,11 @@ class SmallTalkServiceServicer(smalltalk_pb2_grpc.SmallTalkServiceServicer):
                 return smalltalk_pb2.TaskResponse(start=start_hex, end=end_hex, col_idx=col_idx)
             return smalltalk_pb2.TaskResponse(start="", end="", col_idx=0)
 
+        start_time = time.time()
         inactive_docs = await self.collection.find({"IS_ACTIVE": False}).to_list(length=None)
+        end_time = time.time()
+        logger.info("Запрос неактивных микроучастков выполнен за %.3f сек, найдено %d документов", end_time - start_time, len(inactive_docs))
+
         if not inactive_docs:
             logger.debug("Нет доступных микроучастков")
             return smalltalk_pb2.TaskResponse(start="", end="", col_idx=0)
@@ -145,9 +184,10 @@ class SmallTalkServiceServicer(smalltalk_pb2_grpc.SmallTalkServiceServicer):
             end_int = micro_end - completed_keys
             start_int = max(micro_start, end_int - task_size + 1)
 
-        col_idx = int((micro_start - PUZZLES[str(self.puzzle_num)]["start_decimal"]) // (PUZZLES[str(self.puzzle_num)]["total_keys"] // MICRO_COUNT))
+        col_idx = int((micro_start - PUZZLES[str(self.puzzle_num)]["start_decimal"]) // (PUZZLES[str(self.puzzle_num)]["total_keys"] // calculate_optimal_micro_count(PUZZLES[str(self.puzzle_num)]["total_keys"])))
         count_of_tasks = (micro_end - micro_start + 1) // task_size + (1 if (micro_end - micro_start + 1) % task_size else 0)
 
+        start_time = time.time()
         await self.collection.update_one(
             {"START_HEX": micro_doc["START_HEX"]},
             {
@@ -163,6 +203,8 @@ class SmallTalkServiceServicer(smalltalk_pb2_grpc.SmallTalkServiceServicer):
                 }
             }
         )
+        end_time = time.time()
+        logger.info("Обновление микроучастка выполнено за %.3f сек", end_time - start_time)
         logger.info("Выдана задача: start=%s, end=%s, col_idx=%d", hex(start_int), hex(end_int), col_idx)
         return smalltalk_pb2.TaskResponse(start=hex(start_int), end=hex(end_int), col_idx=col_idx)
 
@@ -171,12 +213,17 @@ class SmallTalkServiceServicer(smalltalk_pb2_grpc.SmallTalkServiceServicer):
         if self.test_mode:
             return smalltalk_pb2.CompleteResponse(status="success")
 
+        start_time = time.time()
         doc = await self.collection.find_one({"CURRENT_START_HEX": request.start})
+        end_time = time.time()
+        logger.info("Поиск документа для завершения задачи выполнен за %.3f сек", end_time - start_time)
+
         if doc:
             completed_tasks = doc["COMPLETED_TASKS"] + 1
             percent_tasks = (completed_tasks / doc["COUNT_OF_TASKS"]) * 100
             percent_keys = ((completed_tasks * doc["TASK_COUNT"]) / (int(doc["END_HEX"], 16) - int(doc["START_HEX"], 16) + 1)) * 100
 
+            start_time = time.time()
             await self.collection.update_one(
                 {"START_HEX": doc["START_HEX"]},
                 {
@@ -192,6 +239,8 @@ class SmallTalkServiceServicer(smalltalk_pb2_grpc.SmallTalkServiceServicer):
                     }
                 }
             )
+            end_time = time.time()
+            logger.info("Обновление завершения задачи выполнено за %.3f сек", end_time - start_time)
             logger.info("Задача завершена: start=%s, col_idx=%d", request.start, request.col_idx)
         return smalltalk_pb2.CompleteResponse(status="success")
 
@@ -200,12 +249,19 @@ class SmallTalkServiceServicer(smalltalk_pb2_grpc.SmallTalkServiceServicer):
         if self.test_mode:
             return smalltalk_pb2.StatusResponse(status="success")
 
+        start_time = time.time()
         doc = await self.collection.find_one({"DEVICE": f"GPU-{request.device_id}", "IS_ACTIVE": True})
+        end_time = time.time()
+        logger.info("Поиск активного документа для обновления состояния выполнен за %.3f сек", end_time - start_time)
+
         if doc:
+            start_time = time.time()
             await self.collection.update_one(
                 {"START_HEX": doc["START_HEX"]},
                 {"$set": {"CURRENT_UPDATED_AT": datetime.utcnow(), "CURRENT_SPEED": request.status}}
             )
+            end_time = time.time()
+            logger.info("Обновление состояния выполнено за %.3f сек", end_time - start_time)
         return smalltalk_pb2.StatusResponse(status="success")
 
     async def Ping(self, request, context):
@@ -213,6 +269,30 @@ class SmallTalkServiceServicer(smalltalk_pb2_grpc.SmallTalkServiceServicer):
 
 async def serve(puzzle_num, test_mode=False):
     micro_ranges = await initialize_puzzle(puzzle_num, test_mode)
+    if micro_ranges:
+        # Тестирование выборки задач
+        await test_select_task_range(micro_ranges)
+
+        # Проверка первых и последних микроучастков из базы
+        if not test_mode:
+            collection = db[f"puzzle_{puzzle_num}"]
+            logger.info("Проверка крайних микроучастков в базе")
+            start_time = time.time()
+            first_doc = await collection.find_one(sort=[("START_HEX", 1)])
+            last_doc = await collection.find_one(sort=[("START_HEX", -1)])
+            end_time = time.time()
+            logger.info("Запрос крайних документов выполнен за %.3f сек", end_time - start_time)
+
+            if first_doc and last_doc:
+                first_start = first_doc["START_HEX"]
+                first_end = first_doc["END_HEX"]
+                last_start = last_doc["START_HEX"]
+                last_end = last_doc["END_HEX"]
+                first_keys = int(first_end, 16) - int(first_start, 16) + 1
+                last_keys = int(last_end, 16) - int(last_start, 16) + 1
+                logger.info("Первый микроучасток: start=%s, end=%s, ключи=%d", first_start, first_end, first_keys)
+                logger.info("Последний микроучасток: start=%s, end=%s, ключи=%d", last_start, last_end, last_keys)
+
     if test_mode:
         logger.info("Тестовый режим завершён, сервер не запускается")
         return
