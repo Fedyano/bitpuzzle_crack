@@ -45,6 +45,11 @@ class SmallTalkServiceStub(object):
                 request_serializer=smalltalk__pb2.CompleteRequest.SerializeToString,
                 response_deserializer=smalltalk__pb2.CompleteResponse.FromString,
                 _registered_method=True)
+        self.UpdateStatus = channel.unary_unary(
+                '/smalltalk.SmallTalkService/UpdateStatus',
+                request_serializer=smalltalk__pb2.StatusRequest.SerializeToString,
+                response_deserializer=smalltalk__pb2.StatusResponse.FromString,
+                _registered_method=True)
         self.Ping = channel.unary_unary(
                 '/smalltalk.SmallTalkService/Ping',
                 request_serializer=smalltalk__pb2.PingRequest.SerializeToString,
@@ -70,6 +75,13 @@ class SmallTalkServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def UpdateStatus(self, request, context):
+        """Обновление состояния
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def Ping(self, request, context):
         """Проверка соединения
         """
@@ -89,6 +101,11 @@ def add_SmallTalkServiceServicer_to_server(servicer, server):
                     servicer.CompleteTask,
                     request_deserializer=smalltalk__pb2.CompleteRequest.FromString,
                     response_serializer=smalltalk__pb2.CompleteResponse.SerializeToString,
+            ),
+            'UpdateStatus': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateStatus,
+                    request_deserializer=smalltalk__pb2.StatusRequest.FromString,
+                    response_serializer=smalltalk__pb2.StatusResponse.SerializeToString,
             ),
             'Ping': grpc.unary_unary_rpc_method_handler(
                     servicer.Ping,
@@ -151,6 +168,33 @@ class SmallTalkService(object):
             '/smalltalk.SmallTalkService/CompleteTask',
             smalltalk__pb2.CompleteRequest.SerializeToString,
             smalltalk__pb2.CompleteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateStatus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/smalltalk.SmallTalkService/UpdateStatus',
+            smalltalk__pb2.StatusRequest.SerializeToString,
+            smalltalk__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,

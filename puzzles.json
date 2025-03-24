@@ -4,6 +4,32 @@
     "target_address": "19vkiEajfhuZ8bs8Zu2jgmC6oqZbWqhxhG",
     "start": 68,
     "end": 69,
-    "progress": 0
+    "start_decimal": 295147905179352825856,
+    "end_decimal": 590295810358705651711,
+    "start_hex": "100000000000000000",
+    "end_hex": "1fffffffffffffffff",
+    "total_keys": 295147905179352825856
+  },
+  "71": {
+    "id": 71,
+    "target_address": "1PWo3JeB9jrGwfHDNpdGK54CRas7fsVzXU",
+    "start": 70,
+    "end": 71,
+    "start_decimal": 1180591620717411303424,
+    "end_decimal": 2361183241434822606847,
+    "start_hex": "400000000000000000",
+    "end_hex": "7fffffffffffffffff",
+    "total_keys": 1180591620717411303424
+  },
+  "72": {
+    "id": 72,
+    "target_address": "1JTK7s9YVYywfm5XUH7RNhHJH1LshCaRFR",
+    "start": 72,
+    "end": 73,
+    "start_decimal": 2361183241434822606848,
+    "end_decimal": 4722366482869645213695,
+    "start_hex": "800000000000000000",
+    "end_hex": "ffffffffffffffffff",
+    "total_keys": 2361183241434822606848
   }
 }
